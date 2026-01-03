@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/track_providers.dart';
+import '../providers/pagination_providers.dart';
 import '../widgets/track_list_item.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/empty_state_widget.dart';
@@ -155,6 +156,11 @@ class _TrackListScreenState extends ConsumerState<TrackListScreen> {
         title: const Text('All Tracks'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search'),
+            tooltip: 'Advanced Search',
+          ),
+          IconButton(
             icon: const Icon(Icons.sort),
             onPressed: _showSortDialog,
             tooltip: 'Sort',
@@ -200,6 +206,7 @@ class _TrackListScreenState extends ConsumerState<TrackListScreen> {
                     ),
                   );
                 }
+                // For now, show all tracks. Pagination can be enabled for very large lists
                 return RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(tracksProvider);
