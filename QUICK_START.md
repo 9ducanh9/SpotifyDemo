@@ -2,19 +2,37 @@
 
 ## For Windows/PowerShell Users
 
-### 1. Navigate to Project Directory
+### Quick Setup (Recommended)
+Use the provided PowerShell scripts for easy setup:
+
+```powershell
+# Navigate to project directory
+cd C:\path\to\workspace
+
+# Run setup script (does everything automatically)
+.\setup.ps1
+
+# Run the app
+.\run.ps1
+```
+
+**See `POWERSHELL_GUIDE.md` for detailed script documentation.**
+
+### Manual Setup
+
+#### 1. Navigate to Project Directory
 ```powershell
 cd C:\path\to\workspace
 # or if you're in a different location, navigate to where the project is
 ```
 
-### 2. Verify Flutter Installation
+#### 2. Verify Flutter Installation
 ```powershell
 flutter --version
 flutter doctor
 ```
 
-### 3. Install Dependencies
+#### 3. Install Dependencies
 ```powershell
 flutter pub get
 ```
