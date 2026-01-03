@@ -12,6 +12,8 @@ import '../../features/auth/presentation/providers/auth_providers.dart';
 import '../../features/statistics/presentation/screens/statistics_screen.dart';
 import '../../features/admin/presentation/screens/admin_screen.dart';
 import '../../features/tracks/presentation/screens/advanced_search_screen.dart';
+import '../../features/workflow/presentation/screens/workflow_screen.dart';
+import '../../features/reporting/presentation/screens/reporting_screen.dart';
 
 /// Application routing configuration with authentication guards
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -98,6 +100,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/search',
         name: 'advanced-search',
         builder: (context, state) => const AdvancedSearchScreen(),
+      ),
+      GoRoute(
+        path: '/tracks/:id/workflow',
+        name: 'workflow',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return WorkflowScreen(trackId: id);
+        },
+      ),
+      GoRoute(
+        path: '/reports',
+        name: 'reports',
+        builder: (context, state) => const ReportingScreen(),
       ),
     ],
   );

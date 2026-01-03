@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/music_track_model.dart';
 import '../models/user_model.dart';
+import '../models/action_history.dart';
 
 /// Database helper for SQLite operations
 class DatabaseHelper {
@@ -28,6 +29,7 @@ class DatabaseHelper {
       path,
       version: AppConstants.databaseVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -42,7 +44,9 @@ class DatabaseHelper {
         duration INTEGER NOT NULL,
         filePath TEXT NOT NULL,
         createdAt TEXT NOT NULL,
-        isFavorite INTEGER NOT NULL DEFAULT 0
+        isFavorite INTEGER NOT NULL DEFAULT 0,
+        workflowStatus TEXT NOT NULL DEFAULT 'draft',
+        lastModifiedAt TEXT
       )
     ''');
 
@@ -52,6 +56,20 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL DEFAULT 'regular'
+      )
+    ''');
+
+    // Create action history table
+    await db.execute('''
+      CREATE TABLE ${AppConstants.actionHistoryTable} (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trackId INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        performedBy TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        metadata TEXT,
+        comment TEXT,
+        FOREIGN KEY (trackId) REFERENCES ${AppConstants.tracksTable}(id) ON DELETE CASCADE
       )
     ''');
 
@@ -65,6 +83,63 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX idx_tracks_createdAt ON ${AppConstants.tracksTable}(createdAt)
     ''');
+    await db.execute('''
+      CREATE INDEX idx_tracks_workflowStatus ON ${AppConstants.tracksTable}(workflowStatus)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_action_history_trackId ON ${AppConstants.actionHistoryTable}(trackId)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_action_history_timestamp ON ${AppConstants.actionHistoryTable}(timestamp)
+    ''');
+  }
+
+  /// Upgrade database schema
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add workflow status and action history
+      try {
+        await db.execute('''
+          ALTER TABLE ${AppConstants.tracksTable} 
+          ADD COLUMN workflowStatus TEXT NOT NULL DEFAULT 'draft'
+        ''');
+      } catch (e) {
+        // Column might already exist
+      }
+      try {
+        await db.execute('''
+          ALTER TABLE ${AppConstants.tracksTable} 
+          ADD COLUMN lastModifiedAt TEXT
+        ''');
+      } catch (e) {
+        // Column might already exist
+      }
+      try {
+        await db.execute('''
+          CREATE TABLE ${AppConstants.actionHistoryTable} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trackId INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            performedBy TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            metadata TEXT,
+            comment TEXT,
+            FOREIGN KEY (trackId) REFERENCES ${AppConstants.tracksTable}(id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX idx_tracks_workflowStatus ON ${AppConstants.tracksTable}(workflowStatus)
+        ''');
+        await db.execute('''
+          CREATE INDEX idx_action_history_trackId ON ${AppConstants.actionHistoryTable}(trackId)
+        ''');
+        await db.execute('''
+          CREATE INDEX idx_action_history_timestamp ON ${AppConstants.actionHistoryTable}(timestamp)
+        ''');
+      } catch (e) {
+        // Table might already exist
+      }
+    }
   }
 
   // ========== TRACKS OPERATIONS ==========
@@ -126,6 +201,18 @@ class DatabaseHelper {
     return result.map((map) => MusicTrack.fromMap(map)).toList();
   }
 
+  /// Get tracks by workflow status
+  Future<List<MusicTrack>> getTracksByWorkflowStatus(String status) async {
+    final db = await database;
+    final result = await db.query(
+      AppConstants.tracksTable,
+      where: 'workflowStatus = ?',
+      whereArgs: [status],
+      orderBy: 'createdAt DESC',
+    );
+    return result.map((map) => MusicTrack.fromMap(map)).toList();
+  }
+
   /// Get tracks sorted by a field
   Future<List<MusicTrack>> getTracksSortedBy(String field, {bool ascending = true}) async {
     final db = await database;
@@ -141,9 +228,23 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       AppConstants.tracksTable,
-      track.toMap(),
+      track.copyWith(lastModifiedAt: DateTime.now()).toMap(),
       where: 'id = ?',
       whereArgs: [track.id],
+    );
+  }
+
+  /// Update workflow status
+  Future<int> updateWorkflowStatus(int trackId, String status) async {
+    final db = await database;
+    return await db.update(
+      AppConstants.tracksTable,
+      {
+        'workflowStatus': status,
+        'lastModifiedAt': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [trackId],
     );
   }
 
@@ -152,7 +253,10 @@ class DatabaseHelper {
     final db = await database;
     return await db.update(
       AppConstants.tracksTable,
-      {'isFavorite': isFavorite ? 1 : 0},
+      {
+        'isFavorite': isFavorite ? 1 : 0,
+        'lastModifiedAt': DateTime.now().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [trackId],
     );
@@ -161,6 +265,12 @@ class DatabaseHelper {
   /// Delete a track
   Future<int> deleteTrack(int id) async {
     final db = await database;
+    // Delete action history first (cascade should handle this, but being explicit)
+    await db.delete(
+      AppConstants.actionHistoryTable,
+      where: 'trackId = ?',
+      whereArgs: [id],
+    );
     return await db.delete(
       AppConstants.tracksTable,
       where: 'id = ?',
@@ -171,7 +281,41 @@ class DatabaseHelper {
   /// Delete all tracks
   Future<int> deleteAllTracks() async {
     final db = await database;
+    await db.delete(AppConstants.actionHistoryTable);
     return await db.delete(AppConstants.tracksTable);
+  }
+
+  // ========== ACTION HISTORY OPERATIONS ==========
+
+  /// Insert action history
+  Future<int> insertActionHistory(ActionHistory history) async {
+    final db = await database;
+    return await db.insert(
+      AppConstants.actionHistoryTable,
+      history.toMap(),
+    );
+  }
+
+  /// Get action history for a track
+  Future<List<ActionHistory>> getActionHistory(int trackId) async {
+    final db = await database;
+    final result = await db.query(
+      AppConstants.actionHistoryTable,
+      where: 'trackId = ?',
+      whereArgs: [trackId],
+      orderBy: 'timestamp DESC',
+    );
+    return result.map((map) => ActionHistory.fromMap(map)).toList();
+  }
+
+  /// Get all action history
+  Future<List<ActionHistory>> getAllActionHistory() async {
+    final db = await database;
+    final result = await db.query(
+      AppConstants.actionHistoryTable,
+      orderBy: 'timestamp DESC',
+    );
+    return result.map((map) => ActionHistory.fromMap(map)).toList();
   }
 
   // ========== USERS OPERATIONS ==========

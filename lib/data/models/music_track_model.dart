@@ -1,3 +1,5 @@
+import 'workflow_status.dart';
+
 /// Data model for a music track
 class MusicTrack {
   final int? id;
@@ -7,6 +9,8 @@ class MusicTrack {
   final String filePath;
   final DateTime createdAt;
   final bool isFavorite;
+  final WorkflowStatus workflowStatus; // Multi-step workflow status
+  final DateTime? lastModifiedAt;
 
   MusicTrack({
     this.id,
@@ -16,6 +20,8 @@ class MusicTrack {
     required this.filePath,
     required this.createdAt,
     this.isFavorite = false,
+    this.workflowStatus = WorkflowStatus.draft,
+    this.lastModifiedAt,
   });
 
   /// Create a copy of this track with updated fields
@@ -27,6 +33,8 @@ class MusicTrack {
     String? filePath,
     DateTime? createdAt,
     bool? isFavorite,
+    WorkflowStatus? workflowStatus,
+    DateTime? lastModifiedAt,
   }) {
     return MusicTrack(
       id: id ?? this.id,
@@ -36,6 +44,8 @@ class MusicTrack {
       filePath: filePath ?? this.filePath,
       createdAt: createdAt ?? this.createdAt,
       isFavorite: isFavorite ?? this.isFavorite,
+      workflowStatus: workflowStatus ?? this.workflowStatus,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
     );
   }
 
@@ -49,6 +59,8 @@ class MusicTrack {
       'filePath': filePath,
       'createdAt': createdAt.toIso8601String(),
       'isFavorite': isFavorite ? 1 : 0,
+      'workflowStatus': workflowStatus.value,
+      'lastModifiedAt': lastModifiedAt?.toIso8601String(),
     };
   }
 
@@ -62,6 +74,12 @@ class MusicTrack {
       filePath: map['filePath'] as String,
       createdAt: DateTime.parse(map['createdAt'] as String),
       isFavorite: (map['isFavorite'] as int) == 1,
+      workflowStatus: map['workflowStatus'] != null
+          ? WorkflowStatusExtension.fromString(map['workflowStatus'] as String)
+          : WorkflowStatus.draft,
+      lastModifiedAt: map['lastModifiedAt'] != null
+          ? DateTime.parse(map['lastModifiedAt'] as String)
+          : null,
     );
   }
 
